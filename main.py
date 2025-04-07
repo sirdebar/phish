@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import sys
+import requests
 from datetime import datetime
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -11,7 +12,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from handlers.start import register_start_router
 from handlers.auth import register_auth_router
 from handlers.admin import register_admin_router
-from handlers.utils import admin_ids
+from handlers.worker import register_worker_router
+from handlers.utils import admin_ids, bot_username
 
 # Настройка логирования
 logging.basicConfig(
@@ -54,6 +56,25 @@ except ValueError:
 logger.info(f"API_HASH: {api_hash[:4]}...{api_hash[-4:]}")
 logger.info(f"BOT_TOKEN: {bot_token[:4]}...{bot_token[-4:]}")
 
+# Получаем имя бота
+try:
+    response = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe")
+    if response.status_code == 200:
+        data = response.json()
+        if data["ok"]:
+            from handlers.utils import bot_username as utils_bot_username
+            bot_name = data["result"]["username"]
+            globals()["bot_username"] = bot_name
+            if 'utils_bot_username' in globals():
+                utils_bot_username = bot_name
+            logger.info(f"Имя бота: @{bot_name}")
+        else:
+            logger.error(f"Ошибка при получении имени бота: {data}")
+    else:
+        logger.error(f"Ошибка HTTP при запросе к API: {response.status_code}")
+except Exception as e:
+    logger.error(f"Ошибка при определении имени бота: {str(e)}")
+
 # Загружаем список ID администраторов из переменной окружения
 admin_list = os.getenv('ADMIN_IDS', '').split(',')
 for admin_id in admin_list:
@@ -75,6 +96,7 @@ async def main():
     register_start_router(dp)
     register_auth_router(dp)
     register_admin_router(dp)
+    register_worker_router(dp)
     
     # Создаем директории для сессий и изображений, если они не существуют
     os.makedirs('sessions', exist_ok=True)

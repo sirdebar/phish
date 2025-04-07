@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from handlers.states import AdminStates
-from handlers.utils import admin_ids, format_with_emoji
+from handlers.utils import admin_ids, format_with_emoji, get_worker_by_ref, worker_profiles, referred_users
 
 # Создаем роутер
 router = Router()
@@ -13,10 +13,46 @@ router = Router()
 @router.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext, bot: Bot):
     """Обработчик команды /start"""
-    user_id = message.from_user.id
+    user_id = str(message.from_user.id)
+    args = message.text.split()
+    ref_code = None
+    
+    # Проверяем наличие ref кода в аргументах
+    if len(args) > 1 and args[1].startswith("ref_"):
+        ref_code = args[1]
+        worker_id = get_worker_by_ref(ref_code)
+        
+        # Если найден действительный реферальный код
+        if worker_id and worker_id in worker_profiles:
+            # Записываем, что пользователь пришел по реферальной ссылке
+            referred_users[user_id] = worker_id
+            
+            # Получаем профиль работника
+            profile = worker_profiles[worker_id]
+            
+            # Отправляем анкету работника
+            await message.answer_photo(
+                photo=profile["photo_id"],
+                caption=(
+                    f"*👋 Добро пожаловать!*\n\n"
+                    f"👩 *Имя:* {profile['name']}\n"
+                    f"🧍 *Подписчики:* {profile['followers']}\n"
+                    f"📷 *Фото:* {profile['photos_count']}\n"
+                    f"🎦 *Видео:* {profile['videos_count']}\n\n"
+                    f"🕔 *Дата регистрации:* {profile['date']}\n"
+                    f"📇 *Проверка пройдена:* ✅\n\n"
+                    f"*Для доступа к контенту необходимо зарегистрироваться:*"
+                ),
+                reply_markup=InlineKeyboardBuilder().button(
+                    text="📝 Зарегистрироваться", callback_data="register"
+                ).as_markup(),
+                parse_mode="Markdown"
+            )
+            return
     
     # Проверяем, является ли пользователь админом
-    if str(user_id) in admin_ids:
+    if user_id in admin_ids:
+        print(f"Пользователь {user_id} ({message.from_user.full_name}) является администратором")
         await show_admin_panel(message, state)
         return
     
@@ -81,8 +117,15 @@ async def show_admin_panel(message: types.Message, state: FSMContext):
     # Располагаем кнопки в столбик
     kb.adjust(1)
     
+    # Формируем список администраторов
+    admin_list_text = ""
+    for i, admin_id in enumerate(admin_ids, 1):
+        admin_list_text += f"{i}. `{admin_id}`\n"
+    
     await message.answer(
-        "*👑 Панель администратора*\n\n*Выберите действие:*",
+        "*👑 Панель администратора*\n\n"
+        f"*Зарегистрированные администраторы:*\n{admin_list_text}\n"
+        "*Выберите действие:*",
         reply_markup=kb.as_markup(),
         parse_mode="Markdown"
     )

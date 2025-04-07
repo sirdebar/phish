@@ -261,9 +261,15 @@ async def toggle_notifications(callback: types.CallbackQuery, state: FSMContext)
     
     notification_status = "включены" if admin_notifications else "отключены"
     
+    # Формируем список администраторов
+    admin_list_text = ""
+    for i, admin_id in enumerate(admin_ids, 1):
+        admin_list_text += f"{i}. `{admin_id}`\n"
+    
     await callback.message.edit_text(
         "*👑 Панель администратора*\n\n"
         f"*ℹ️ Уведомления {notification_status}*\n\n"
+        f"*Зарегистрированные администраторы:*\n{admin_list_text}\n"
         "*Выберите действие:*",
         reply_markup=kb.as_markup(),
         parse_mode="Markdown"
@@ -293,8 +299,14 @@ async def back_to_admin(callback: types.CallbackQuery, state: FSMContext):
     # Располагаем кнопки в столбик
     kb.adjust(1)
     
+    # Формируем список администраторов
+    admin_list_text = ""
+    for i, admin_id in enumerate(admin_ids, 1):
+        admin_list_text += f"{i}. `{admin_id}`\n"
+    
     await callback.message.edit_text(
         "*👑 Панель администратора*\n\n"
+        f"*Зарегистрированные администраторы:*\n{admin_list_text}\n"
         "*Выберите действие:*",
         reply_markup=kb.as_markup(),
         parse_mode="Markdown"
