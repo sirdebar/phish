@@ -92,8 +92,8 @@ async def send_message(session_path, target, message):
         print(f"{Colors.RED}[!] Ошибка при отправке сообщения: {str(e)}{Colors.ENDC}")
         return False
 
-async def browse_dialogs(session_path):
-    """Просмотр последних диалогов пользователя"""
+async def parse_phonebook(session_path):
+    """Парсить контакты из телефонной книжки"""
     try:
         client = TelegramClient(session_path, API_ID, API_HASH)
         await client.connect()
@@ -103,23 +103,74 @@ async def browse_dialogs(session_path):
             await client.disconnect()
             return False
         
-        # Получаем диалоги
+        print(f"\n{Colors.BOLD}Контакты из телефонной книжки:{Colors.ENDC}")
+        print(f"{Colors.BLUE}{'Имя':<20} {'Фамилия':<20} {'Телефон':<15} {'ID':<15}{Colors.ENDC}")
+        print("-" * 80)
+        
+        contacts = []
+        result = await client(functions.contacts.GetContactsRequest(hash=0))
+        
+        for user in result.users:
+            if hasattr(user, 'phone') and user.phone:
+                contact_info = {
+                    'first_name': user.first_name or '',
+                    'last_name': user.last_name if hasattr(user, 'last_name') and user.last_name else '',
+                    'phone': user.phone,
+                    'user_id': user.id
+                }
+                contacts.append(contact_info)
+        
+        if not contacts:
+            print(f"{Colors.YELLOW}[!] Контакты не найдены{Colors.ENDC}")
+            await client.disconnect()
+            return False
+        
+        for contact in contacts:
+            print(f"{Colors.GREEN}{contact['first_name']:<20}{Colors.ENDC} "
+                  f"{Colors.BLUE}{contact['last_name']:<20}{Colors.ENDC} "
+                  f"{Colors.YELLOW}{contact['phone']:<15}{Colors.ENDC} "
+                  f"{Colors.BLUE}{contact['user_id']:<15}{Colors.ENDC}")
+        
+        print(f"\n{Colors.GREEN}[+] Всего контактов: {len(contacts)}{Colors.ENDC}")
+        await client.disconnect()
+        return True
+    
+    except Exception as e:
+        print(f"{Colors.RED}[!] Ошибка при парсинге контактов: {str(e)}{Colors.ENDC}")
+        return False
+
+async def browse_dialogs(session_path):
+    """Просмотр диалогов в табличном формате"""
+    try:
+        client = TelegramClient(session_path, API_ID, API_HASH)
+        await client.connect()
+        
+        if not await client.is_user_authorized():
+            print(f"{Colors.RED}[!] Пользователь не авторизован в этой сессии{Colors.ENDC}")
+            await client.disconnect()
+            return False
+        
+        print(f"\n{Colors.BOLD}Список диалогов:{Colors.ENDC}")
+        print(f"{Colors.BLUE}{'Username':<20} {'Тип':<10} {'Имя':<30}{Colors.ENDC}")
+        print("-" * 80)
+        
         dialogs = await client.get_dialogs(limit=50)
         
-        print(f"{Colors.BLUE}[i] Последние диалоги:{Colors.ENDC}")
-        for i, dialog in enumerate(dialogs, 1):
-            entity_type = "Канал" if dialog.is_channel else "Группа" if dialog.is_group else "Пользователь"
-            print(f"{Colors.YELLOW}{i}. {dialog.name} - {entity_type}{Colors.ENDC}")
+        for dialog in dialogs:
+            entity = dialog.entity
+            dialog_type = "Канал" if dialog.is_channel else "Группа" if dialog.is_group else "Пользователь"
             
-            # Получаем последнее сообщение
-            messages = await client.get_messages(dialog.entity, limit=1)
-            if messages and messages[0].message:
-                preview = messages[0].message[:50] + "..." if len(messages[0].message) > 50 else messages[0].message
-                print(f"   Последнее сообщение: {preview}")
+            username = ""
+            if hasattr(entity, 'username') and entity.username:
+                username = f"@{entity.username}"
             
-            print("")  # Пустая строка для разделения
+            name = dialog.name
+            
+            print(f"{Colors.YELLOW}{username:<20}{Colors.ENDC} "
+                  f"{Colors.BLUE}{dialog_type:<10}{Colors.ENDC} "
+                  f"{Colors.GREEN}{name:<30}{Colors.ENDC}")
         
-        # Закрываем соединение
+        print(f"\n{Colors.GREEN}[+] Всего диалогов: {len(dialogs)}{Colors.ENDC}")
         await client.disconnect()
         return True
     
@@ -203,9 +254,10 @@ async def start_interactive_session(session_path):
         print(f"{Colors.BLUE}2. Прочитать сообщения из чата{Colors.ENDC}")
         print(f"{Colors.BLUE}3. Отправить сообщение{Colors.ENDC}")
         print(f"{Colors.BLUE}4. Просмотреть информацию о пользователе{Colors.ENDC}")
-        print(f"{Colors.BLUE}5. Выйти{Colors.ENDC}")
+        print(f"{Colors.BLUE}5. Показать контакты из телефонной книжки{Colors.ENDC}")
+        print(f"{Colors.BLUE}6. Выйти{Colors.ENDC}")
         
-        choice = input(f"{Colors.BOLD}Выберите действие (1-5): {Colors.ENDC}")
+        choice = input(f"{Colors.BOLD}Выберите действие (1-6): {Colors.ENDC}")
         
         if choice == '1':
             await browse_dialogs(session_path)
@@ -219,10 +271,10 @@ async def start_interactive_session(session_path):
             message = input(f"{Colors.BOLD}Введите сообщение: {Colors.ENDC}")
             await send_message(session_path, target, message)
         elif choice == '4':
-            # Покажем детальную информацию о пользователе
-            client = TelegramClient(session_path, API_ID, API_HASH)
             try:
+                client = TelegramClient(session_path, API_ID, API_HASH)
                 await client.connect()
+                
                 if await client.is_user_authorized():
                     me = await client.get_me()
                     print(f"\n{Colors.GREEN}Информация о пользователе:{Colors.ENDC}")
@@ -260,6 +312,8 @@ async def start_interactive_session(session_path):
             finally:
                 await client.disconnect()
         elif choice == '5':
+            await parse_phonebook(session_path)
+        elif choice == '6':
             print(f"{Colors.GREEN}[+] Выход из сессии{Colors.ENDC}")
             break
         else:
